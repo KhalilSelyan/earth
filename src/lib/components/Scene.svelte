@@ -1,81 +1,95 @@
 <script lang="ts">
-  import { T } from '@threlte/core'
-  import { ContactShadows, Float, Grid, OrbitControls } from '@threlte/extras'
+	import { forwardEventHandlers, T, useTask } from '@threlte/core';
+	import { OrbitControls, Stars } from '@threlte/extras';
+	import { Group, TextureLoader } from 'three';
+	import { get } from 'svelte/store';
+
+	export let controls;
+
+	const component = forwardEventHandlers();
+
+	const detail = 400;
+	const groupRef = new Group();
+
+	const colorMap = new TextureLoader().load('/00_earthmap1k.jpg');
+	const elevationMap = new TextureLoader().load('/01_earthbump1k.jpg');
+	const specularMap = new TextureLoader().load('/02_earthspec1k.jpg');
+	const lightsMap = new TextureLoader().load('/03_earthlights1k.jpg');
+
+	const vertexShader = `
+    uniform float size;
+    uniform sampler2D elevationTexture;
+
+    varying vec2 vUv;
+    varying float vVisible;
+    void main() {
+      vUv = uv;
+      vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+      float elevation = texture2D( elevationTexture, vUv ).r;
+      vec3 vNormal = normalMatrix * normal;
+      vVisible = step(0.0, dot( -normalize( mvPosition.xyz ), normalize( vNormal ) ));
+      mvPosition.z += 0.35 * elevation;
+      gl_PointSize = size;
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `;
+
+	const fragmentShader = `
+  uniform sampler2D colorTexture;
+  uniform sampler2D alphaTexture;
+  varying vec2 vUv;
+  varying float vVisible;
+  void main() {
+    if ( vVisible < 0.5 ) discard;
+    float alpha = 1.0 - texture2D( alphaTexture, vUv ).r;
+    vec3 color = texture2D( colorTexture, vUv ).rgb;
+    gl_FragColor = vec4( color, alpha );
+  }
+  `;
+
+	const uniforms = {
+		size: { type: 'f', value: 3.0 },
+		colorTexture: { value: colorMap },
+		elevationTexture: { value: elevationMap },
+		alphaTexture: { value: specularMap }
+	};
+
+	// cause a re-render when the mapType changes
+	// Update the texture based on the selected map type
+	$: {
+		if (typeof $controls.mapType === 'object' && $controls.mapType !== null) {
+			console.log($controls);
+			const selectedTexture =
+				$controls.mapType.value === '00_earthmap1k.jpg' ? colorMap : lightsMap;
+			uniforms.colorTexture.value = selectedTexture;
+			uniforms.colorTexture.value.needsUpdate = true;
+		}
+	}
+
+	useTask(() => {
+		groupRef.rotation.y += 0.005;
+	});
 </script>
 
-<T.PerspectiveCamera
-  makeDefault
-  position={[-10, 10, 10]}
-  fov={15}
->
-  <OrbitControls
-    autoRotate
-    enableZoom={false}
-    enableDamping
-    autoRotateSpeed={0.5}
-    target.y={1.5}
-  />
+<T.PerspectiveCamera makeDefault position={[5, 0, 0]} fov={45}>
+	<OrbitControls enableDamping autoRotateSpeed={0.5} />
 </T.PerspectiveCamera>
 
-<T.DirectionalLight
-  intensity={0.8}
-  position.x={5}
-  position.y={10}
-/>
+<T.DirectionalLight intensity={0.8} position.x={5} position.y={10} />
 <T.AmbientLight intensity={0.2} />
 
-<Grid
-  position.y={-0.001}
-  cellColor="#ffffff"
-  sectionColor="#ffffff"
-  sectionThickness={0}
-  fadeDistance={25}
-  cellSize={2}
-/>
+<T is={groupRef} bind:this={$component}>
+	<T.Mesh>
+		<T.IcosahedronGeometry args={[1, 10]} />
+		<T.MeshBasicMaterial wireframe color={'#202020'} />
+	</T.Mesh>
 
-<ContactShadows
-  scale={10}
-  blur={2}
-  far={2.5}
-  opacity={0.5}
-/>
+	<T.Mesh>
+		<T.Points>
+			<T.IcosahedronGeometry args={[1, detail]} />
+			<T.ShaderMaterial transparent {vertexShader} {fragmentShader} {uniforms}></T.ShaderMaterial>
+		</T.Points>
+	</T.Mesh>
+</T>
 
-<Float
-  floatIntensity={1}
-  floatingRange={[0, 1]}
->
-  <T.Mesh
-    position.y={1.2}
-    position.z={-0.75}
-  >
-    <T.BoxGeometry />
-    <T.MeshStandardMaterial color="#0059BA" />
-  </T.Mesh>
-</Float>
-
-<Float
-  floatIntensity={1}
-  floatingRange={[0, 1]}
->
-  <T.Mesh
-    position={[1.2, 1.5, 0.75]}
-    rotation.x={5}
-    rotation.y={71}
-  >
-    <T.TorusKnotGeometry args={[0.5, 0.15, 100, 12, 2, 3]} />
-    <T.MeshStandardMaterial color="#F85122" />
-  </T.Mesh>
-</Float>
-
-<Float
-  floatIntensity={1}
-  floatingRange={[0, 1]}
->
-  <T.Mesh
-    position={[-1.4, 1.5, 0.75]}
-    rotation={[-5, 128, 10]}
-  >
-    <T.IcosahedronGeometry />
-    <T.MeshStandardMaterial color="#F8EBCE" />
-  </T.Mesh>
-</Float>
+<Stars speed={10} fade={true} />
