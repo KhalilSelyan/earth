@@ -58,7 +58,6 @@
 	// Update the texture based on the selected map type
 	$: {
 		if (typeof $controls.mapType === 'object' && $controls.mapType !== null) {
-			console.log($controls);
 			const selectedTexture =
 				$controls.mapType.value === '00_earthmap1k.jpg' ? colorMap : lightsMap;
 			uniforms.colorTexture.value = selectedTexture;
